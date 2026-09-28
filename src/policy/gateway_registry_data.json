@@ -1,0 +1,37 @@
+{
+  "rbac": {
+    "role_scopes": {
+      "trade-recon-agent": [
+        {
+          "tool": "erp.query",
+          "verb": "read"
+        },
+        {
+          "tool": "market_data.query",
+          "verb": "read"
+        },
+        {
+          "tool": "trade.correct",
+          "verb": "write"
+        }
+      ],
+      "risk-analyst-agent": [
+        {
+          "tool": "market_data.query",
+          "verb": "read"
+        },
+        {
+          "tool": "risk_engine.query",
+          "verb": "read"
+        }
+      ]
+    }
+  },
+  "gateway_config": {
+    "max_delegation_depth": 1,
+    "safety_hold_agents": []
+  },
+  "registry": {
+    "last_attestation_hash": {}
+  }
+}
