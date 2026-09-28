@@ -1,0 +1,20 @@
+{
+  "agent": {
+    "agent_id": "agt-trade-recon-01",
+    "spiffe_id": "spiffe://fluxnova.internal/agent/trade-recon",
+    "identity_token": {"verified": true, "exp": 9999999999},
+    "human_delegator": "trader.jsmith@bank.example",
+    "delegation_depth": 1,
+    "roles": ["trade-recon-agent"],
+    "agbom": {
+      "model": "claude-sonnet-4-6",
+      "model_version": "2026-06-01",
+      "prompt_hash": "sha256:9f1c2a",
+      "tool_manifest_hash": "sha256:5e6b8d",
+      "signature": "sig:71ffa2",
+      "prev_attestation_hash": ""
+    }
+  },
+  "action": {"tool": "trade.correct", "verb": "write", "risk_tier": "high"},
+  "context": {"process_instance_id": "pi-1", "business_key": "TRD-2026-04471", "human_attestation": false, "timestamp": "2026-09-15T13:04:00Z"}
+}
