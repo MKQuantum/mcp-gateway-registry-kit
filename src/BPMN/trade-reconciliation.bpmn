@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_TradeRecon"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="trade-reconciliation" name="Trade Reconciliation" isExecutable="true">
+
+    <bpmn:startEvent id="StartEvent_1" name="Reconciliation due">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- READ: low risk, sails through policy -->
+    <bpmn:serviceTask id="Task_QueryERP" name="Query ERP Balances"
+                      camunda:type="external" camunda:topic="erp.query">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- WRITE: high risk, policy returns step_up_required -->
+    <bpmn:serviceTask id="Task_InitiateCorrection" name="Initiate Correction"
+                      camunda:type="external" camunda:topic="trade.correct">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:incoming>Flow_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- The step-up hook: worker raises STEP_UP_REQUIRED, this catches it -->
+    <bpmn:boundaryEvent id="Boundary_StepUp" name="Step-up required"
+                        attachedToRef="Task_InitiateCorrection">
+      <bpmn:outgoing>Flow_ToApproval</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrDef_StepUp" errorRef="Error_StepUp"/>
+    </bpmn:boundaryEvent>
+
+    <!-- Human trader approves in Tasklist -->
+    <bpmn:userTask id="Task_TraderApproval" name="Trader approval required"
+                   camunda:candidateGroups="traders">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="humanAttestation" label="I approve this correction"
+                             type="boolean" defaultValue="false"/>
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToApproval</bpmn:incoming>
+      <bpmn:outgoing>Flow_Retry</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:endEvent id="EndEvent_1" name="Reconciled">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_QueryERP"/>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_QueryERP" targetRef="Task_InitiateCorrection"/>
+    <bpmn:sequenceFlow id="Flow_ToApproval" sourceRef="Boundary_StepUp" targetRef="Task_TraderApproval"/>
+    <bpmn:sequenceFlow id="Flow_Retry" sourceRef="Task_TraderApproval" targetRef="Task_InitiateCorrection"/>
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_InitiateCorrection" targetRef="EndEvent_1"/>
+  </bpmn:process>
+
+  <bpmn:error id="Error_StepUp" name="Step Up Required" errorCode="STEP_UP_REQUIRED"/>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="trade-reconciliation">
+      <bpmndi:BPMNShape id="Shape_StartEvent_1" bpmnElement="StartEvent_1">
+        <dc:Bounds x="160" y="182" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_QueryERP" bpmnElement="Task_QueryERP">
+        <dc:Bounds x="250" y="160" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_InitiateCorrection" bpmnElement="Task_InitiateCorrection">
+        <dc:Bounds x="440" y="160" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Boundary_StepUp" bpmnElement="Boundary_StepUp">
+        <dc:Bounds x="522" y="222" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Task_TraderApproval" bpmnElement="Task_TraderApproval">
+        <dc:Bounds x="440" y="320" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EndEvent_1" bpmnElement="EndEvent_1">
+        <dc:Bounds x="642" y="182" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_1" bpmnElement="Flow_1">
+        <di:waypoint x="196" y="200"/>
+        <di:waypoint x="250" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_2" bpmnElement="Flow_2">
+        <di:waypoint x="370" y="200"/>
+        <di:waypoint x="440" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ToApproval" bpmnElement="Flow_ToApproval">
+        <di:waypoint x="540" y="258"/>
+        <di:waypoint x="540" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Retry" bpmnElement="Flow_Retry">
+        <di:waypoint x="440" y="360"/>
+        <di:waypoint x="400" y="360"/>
+        <di:waypoint x="400" y="220"/>
+        <di:waypoint x="440" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_3" bpmnElement="Flow_3">
+        <di:waypoint x="560" y="200"/>
+        <di:waypoint x="642" y="200"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
