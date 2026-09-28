@@ -75,6 +75,13 @@ cd src/policy && opa test . -v
 See [`docs/policy-guide.md`](docs/policy-guide.md) for what each guardrail rule
 does and why.
 
+## Standards and Regulatory Alignment
+
+By leveraging this pattern and policy, several standards and global regulation control requirements will be addressed.
+<img width="1204" height="539" alt="image" src="https://github.com/user-attachments/assets/e5f24c43-7185-4aa9-8ace-f4bc34714033" />
+
+See the following risk and controls matrix to see how risk domains are mapped to the guardrails as well as to the global standards, frameworks, and regualations: 
+
 ## Status
 
 This is a reference implementation of a *pattern*, not a hardened product.
