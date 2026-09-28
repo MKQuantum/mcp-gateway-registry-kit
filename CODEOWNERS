@@ -1,0 +1,6 @@
+# Default owners for everything in the repo.
+# Replace with real GitHub usernames/teams before publishing.
+*                       @your-github-username
+/src/policy/            @your-github-username
+/src/gateway/           @your-github-username
+/workshop/              @your-github-username
