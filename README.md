@@ -32,10 +32,6 @@ sits between every agent and every MCP server.
   policy rules, SBOM/SPDX metadata, approval status
 - **Gateway** (enforcement plane) — what's enforced: identity verification,
   RBAC, the OPA policy decision, tool filtering, audit generation
-- **FluxNova** carries the accountability context a stateless MCP call
-  can't: a process instance, a business key, and a named human who started
-  it. A blocked action isn't a failure — it's a BPMN user task waiting for
-  a human, and the process resumes exactly where it left off once approved.
 
 Full write-up: [`docs/architecture.md`](docs/architecture.md).
 
