@@ -58,10 +58,7 @@ docker compose up --build
 bash run-demo.sh
 ```
 
-You'll see a read allowed and a $50M write blocked and routed to a human —
-with a linked audit event either way. Full walkthrough: [`example/README.md`](example/README.md).
-
-Want to learn it by building it instead? Start with
+Want to learn it by building it? Start with
 [`workshop/BUILD-IT-YOURSELF.md`](workshop/BUILD-IT-YOURSELF.md).
 
 ## The policy
