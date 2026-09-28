@@ -1,0 +1,76 @@
+# Simplest way to run the whole stack: one command, no Kubernetes.
+#   docker compose up --build
+#
+# Wait for the "fluxnova" service to finish booting (1-2 min first time),
+# then open http://localhost:8080
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fluxnova
+      POSTGRES_USER: fluxnova
+      POSTGRES_PASSWORD: fluxnova-dev-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fluxnova"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  fluxnova:
+    image: ghcr.io/finos/fluxnova-bpm-platform:1.1.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_DRIVER: org.postgresql.Driver
+      DB_URL: jdbc:postgresql://postgres:5432/fluxnova
+      DB_USERNAME: fluxnova
+      DB_PASSWORD: fluxnova-dev-password
+      WAIT_FOR: postgres:5432
+    ports:
+      - "8080:8080"
+
+  opa:
+    image: openpolicyagent/opa:1.20.2
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "/policy/gateway_registry_policy.rego"
+      - "/policy/gateway_registry_data.json"
+    volumes:
+      - ../src/policy:/policy:ro
+    ports:
+      - "8181:8181"
+
+  mock-mcp:
+    build: ../src/mock-mcp-server
+    ports:
+      - "9000:9000"
+
+  gateway:
+    build: ../src/gateway
+    depends_on:
+      - opa
+      - mock-mcp
+    environment:
+      OPA_URL: http://opa:8181
+      JWT_SIGNING_SECRET: dev-only-change-me
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: ../src/worker
+    depends_on:
+      - gateway
+      - fluxnova
+    environment:
+      FLUXNOVA_REST: http://fluxnova:8080/engine-rest
+      GATEWAY_URL: http://gateway:8000
+      MCP_SERVER_URL: http://mock-mcp:9000/mcp
+      JWT_SIGNING_SECRET: dev-only-change-me
+      FLUXNOVA_USER: demo
+      FLUXNOVA_PASSWORD: demo
+    restart: unless-stopped   # keeps retrying while FluxNova finishes booting
