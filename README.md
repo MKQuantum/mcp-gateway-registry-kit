@@ -81,6 +81,8 @@ By leveraging this pattern and policy, several standards and global regulation c
 
 See the following risk and controls matrix to understand how risk domains are mapped to the guardrails as well as to the global standards, frameworks, and regulations: [`docs/Agentic_Mesh_Risk_and_Controls_Framework.xlsx`](docs/Agentic_Mesh_Risk_and_Controls_Framework.xlsx)
 
+A more Executive level Framework to better help understand the risk and related controls is available here:  [` `]( ).
+
 ## Status
 
 This is a reference implementation of a *pattern*, not a hardened product.
