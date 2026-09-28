@@ -1,0 +1,294 @@
+---
+# ============================================================================
+# 00 — Namespace
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-gov
+---
+# ============================================================================
+# 01 — Postgres (FluxNova's datastore)
+# For a demo. In production use a managed database and a real secret manager.
+# ============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: mcp-gov
+type: Opaque
+stringData:
+  username: fluxnova
+  password: fluxnova-dev-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: fluxnova
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: db-credentials, key: username } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: db-credentials, key: password } }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          emptyDir: {}          # demo only — use a PVC for anything persistent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: mcp-gov
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+# ============================================================================
+# 02 — FluxNova BPM platform
+# Image + env var names taken from the project's own Dockerfile/docker-script.sh
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxnova
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: fluxnova }
+  template:
+    metadata:
+      labels: { app: fluxnova }
+    spec:
+      containers:
+        - name: fluxnova
+          image: ghcr.io/finos/fluxnova-bpm-platform:1.1.0
+          env:
+            - name: DB_DRIVER
+              value: org.postgresql.Driver
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/fluxnova
+            - name: DB_USERNAME
+              valueFrom: { secretKeyRef: { name: db-credentials, key: username } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: db-credentials, key: password } }
+            - name: WAIT_FOR
+              value: postgres:5432
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /engine-rest/engine, port: 8080 }
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            failureThreshold: 30
+          securityContext:
+            runAsUser: 4001          # image creates fluxnova_user with uid 4001
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluxnova
+  namespace: mcp-gov
+spec:
+  selector: { app: fluxnova }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+# ============================================================================
+# 03 — OPA (the policy decision point)
+# Policy + data are mounted from a ConfigMap built by deploy.sh
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: opa }
+  template:
+    metadata:
+      labels: { app: opa }
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:1.20.2
+          args:
+            - "run"
+            - "--server"
+            - "--addr=0.0.0.0:8181"
+            - "--log-level=info"
+            - "/policy/gateway_registry_policy.rego"
+            - "/policy/gateway_registry_data.json"
+          ports: [{ containerPort: 8181 }]
+          volumeMounts:
+            - name: policy
+              mountPath: /policy
+          readinessProbe:
+            httpGet: { path: /health, port: 8181 }
+            initialDelaySeconds: 5
+      volumes:
+        - name: policy
+          configMap: { name: gateway-policy }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: mcp-gov
+spec:
+  selector: { app: opa }
+  ports: [{ port: 8181, targetPort: 8181 }]
+---
+# ============================================================================
+# 04 — Mock financial MCP server
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-mcp
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mock-mcp }
+  template:
+    metadata:
+      labels: { app: mock-mcp }
+    spec:
+      containers:
+        - name: mock-mcp
+          image: mcp-gov/mock-mcp:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 9000 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-mcp
+  namespace: mcp-gov
+spec:
+  selector: { app: mock-mcp }
+  ports: [{ port: 9000, targetPort: 9000 }]
+---
+# ============================================================================
+# 05 — Gateway (policy enforcement point)
+# ============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-signing
+  namespace: mcp-gov
+type: Opaque
+stringData:
+  jwt-secret: dev-only-change-me
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      containers:
+        - name: gateway
+          image: mcp-gov/gateway:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OPA_URL
+              value: http://opa:8181
+            - name: JWT_SIGNING_SECRET
+              valueFrom: { secretKeyRef: { name: agent-signing, key: jwt-secret } }
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: mcp-gov
+spec:
+  selector: { app: gateway }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+# ============================================================================
+# 06 — External Task Worker
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: mcp-gov
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      containers:
+        - name: worker
+          image: mcp-gov/worker:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: FLUXNOVA_REST
+              value: http://fluxnova:8080/engine-rest
+            - name: GATEWAY_URL
+              value: http://gateway:8000
+            - name: MCP_SERVER_URL
+              value: http://mock-mcp:9000/mcp
+            - name: JWT_SIGNING_SECRET
+              valueFrom: { secretKeyRef: { name: agent-signing, key: jwt-secret } }
+            - name: FLUXNOVA_USER
+              value: demo
+            - name: FLUXNOVA_PASSWORD
+              value: demo
+---
+# ============================================================================
+# 07 — NetworkPolicy: MCP servers are reachable ONLY from the Gateway.
+# This is what makes the gateway an actual chokepoint rather than a
+# convention the worker could bypass. Requires a CNI that enforces
+# NetworkPolicy (Calico, Cilium; kind's default CNI does NOT).
+# ============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-servers-gateway-only
+  namespace: mcp-gov
+spec:
+  podSelector:
+    matchLabels: { app: mock-mcp }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: gateway }
